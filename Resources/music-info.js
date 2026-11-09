@@ -1,0 +1,24 @@
+'use strict';
+let infoRequest=0,infoItem=null;
+function showMusicInfo(item){infoItem={...item};const requestID=String(++infoRequest);$('info-title').textContent=item.title;$('info-content').replaceChildren(el('p','dialog-description',item.artist||'Artist not available'));if(item.year)$('info-content').append(el('p','',`YouTube Music release year: ${item.year}`));$('info-content').append(el('p','dialog-description','Looking up earliest release dates in MusicBrainz…'));if(!$('info-dialog').open)$('info-dialog').showModal();if(!item.artist){$('info-content').append(el('p','dialog-description','An artist name is needed to match this release accurately.'));return;}native('music-info',{requestID,title:item.title,artist:item.artist,kind:item.kind==='album'?'album':'song'});}
+function receiveMusicInfo(data){if(String(data.requestID).startsWith('now-')){receiveNowRelease(data);return;}if(data.requestID!==String(infoRequest)||!$('info-dialog').open)return;if(!data.error&&infoItem&&nowReleaseItem&&infoItem.title===nowReleaseItem.title&&infoItem.artist===nowReleaseItem.artist)receiveNowRelease({...data,requestID:'now-'+nowReleaseSequence});const loading=$('info-content').lastElementChild;if(loading?.textContent.includes('Looking up'))loading.remove();if(data.error){$('info-content').append(el('p','dialog-description',data.error));return;}if(!data.matches?.length){$('info-content').append(el('p','dialog-description','No exact release-date match found. A YouTube upload date is not necessarily the original music release date.'));return;}if(data.matches.length>1)$('info-content').append(el('p','dialog-description','Several matching recordings/releases have different dates or versions. Check the source for the version you mean.'));for(const match of data.matches){const card=el('div','release-info-card');card.append(el('strong','',`Earliest release: ${match.date}`));if(match.note)card.append(el('p','dialog-description',match.note));card.append(button('Source: MusicBrainz ↗','Open release source',()=>native('external',{url:match.url})));$('info-content').append(card);}$('info-content').append(el('p','dialog-description','Dates show the earliest release listed by MusicBrainz, which can differ from a remaster or reissue. Year-only and month-only dates are shown without inventing a day.'));}
+$('info-close').onclick=()=>$('info-dialog').close();
+
+let nowReleaseSequence=0,nowReleaseKey='',nowReleaseItem=null,nowReleaseTimer,nowReleaseRetries=0;
+const nowReleaseCache=new Map();
+function clearNowRelease(){clearTimeout(nowReleaseTimer);++nowReleaseSequence;nowReleaseKey='';nowReleaseItem=null;nowReleaseRetries=0;$('now-release').hidden=true;}
+function releaseDateLabel(value){const parts=value.split('-');if(parts.length===1)return value;const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];const month=months[Number(parts[1])-1];if(!month)return value;return parts.length===2?`${month} ${parts[0]}`:`${month} ${Number(parts[2])}, ${parts[0]}`;}
+function updateNowRelease(item){
+ const key=[item.source||source,item.id||'',item.title||'',item.artist||''].join('|');if(key===nowReleaseKey)return;
+ clearNowRelease();nowReleaseKey=key;nowReleaseItem={...item,kind:'song'};
+ const b=$('now-release');b.hidden=false;b.textContent='Release: looking up…';b.title='Earliest music release listed by MusicBrainz';
+ if(!item.title||!item.artist||item.title.length>=500||item.artist.length>=500){b.textContent='Release date unavailable';return;}
+ const requestID='now-'+nowReleaseSequence;
+ if(nowReleaseCache.has(key)){receiveNowRelease({...nowReleaseCache.get(key),requestID});return;}
+ nowReleaseTimer=setTimeout(()=>{if(key===nowReleaseKey)native('music-info',{requestID,title:item.title,artist:item.artist,kind:'song'});},350);
+}
+function receiveNowRelease(data){if(data.requestID!=='now-'+nowReleaseSequence)return;const b=$('now-release');const dates=[...new Set((data.matches||[]).map(x=>x.date))];
+ if(data.error){b.textContent='Release lookup unavailable';if(nowReleaseRetries<1){nowReleaseRetries++;const sequence=nowReleaseSequence;nowReleaseTimer=setTimeout(()=>{if(sequence===nowReleaseSequence&&nowReleaseItem)native('music-info',{requestID:'now-'+sequence,title:nowReleaseItem.title,artist:nowReleaseItem.artist,kind:'song'});},30000);}}else if(!dates.length)b.textContent='Release date unavailable';else if(dates.length>1)b.textContent='Release: multiple versions ⓘ';else b.textContent=`Released ${releaseDateLabel(dates[0])} ⓘ`;
+ if(!data.error){if(nowReleaseCache.size>=100)nowReleaseCache.clear();nowReleaseCache.set(nowReleaseKey,data);}b.title=dates.length===1?'Earliest release listed by MusicBrainz. Click for source and version details.':'Click for release information and source details.';
+}
+$('now-release').onclick=()=>{if(nowReleaseItem)showMusicInfo(nowReleaseItem);};

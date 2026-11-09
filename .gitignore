@@ -1,0 +1,6 @@
+# Build output
+build/
+
+# macOS metadata (extra files on ExFAT drives)
+.DS_Store
+._*

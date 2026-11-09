@@ -1,0 +1,14 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const ytScript=fs.readFileSync('Resources/youtube-sample.js','utf8');
+const video={paused:false,ended:false,currentTime:15,duration:100};let ad=false;
+const bar={querySelector:s=>s==='.title'?{textContent:'Song'}:s.includes('browse/')?{textContent:'Album'}:null,querySelectorAll:()=>[{textContent:'Artist'}]};
+const ctx={document:{querySelector:s=>s==='ytmusic-player-bar'?bar:s==='video'?video:s==='#movie_player'?{getVideoData:()=>({video_id:'123'})}:s.includes('ad-showing')&&ad?{}:null},navigator:{mediaSession:{metadata:{}}}};
+assert.equal(vm.runInNewContext(ytScript,ctx).artist,'Artist');
+ad=true;assert.equal(vm.runInNewContext(ytScript,ctx).eligible,false);assert.equal(vm.runInNewContext(ytScript,ctx).playing,false);
+const scScript=fs.readFileSync('Resources/soundcloud-tracking.js','utf8');
+let poll, captured;let duration=100000;
+const callbacks={};const widget={bind:(name,cb)=>callbacks[name]=cb,getCurrentSound:cb=>cb({id:1,title:'SC Song',duration:100000,permalink_url:'https://soundcloud.com/artist/song',user:{username:'Uploader'},publisher_metadata:{artist:'Musician'}}),getDuration:cb=>cb(duration),getPosition:cb=>cb(50000),isPaused:cb=>cb(false)};
+const ui={};const scCtx={window:{SC:{Widget:()=>widget}},SC:{Widget:Object.assign(()=>widget,{Events:{READY:'ready',PLAY:'play',PAUSE:'pause',ERROR:'error'}})},toast:()=>{},native:(a,v)=>{if(a==='history-sample')captured=v.sample},setInterval:fn=>{poll=fn;return 1},clearInterval:()=>{},setTimeout:()=>1,clearTimeout:()=>{},source:'soundcloud',$:id=>ui[id]??={}};
+vm.runInNewContext(scScript,scCtx);scCtx.attachSoundCloudTracking({isConnected:true});poll();assert.equal(captured.artist,'Musician');assert.equal(captured.position,50);assert.equal(captured.eligible,true);
+duration=30000;poll();assert.equal(captured.eligible,false,'Previews must not qualify');scCtx.stopSoundCloudTracking();captured=null;poll();assert.equal(captured,null,'Old widgets must stop tracking');
+console.log('PASS: YouTube ad exclusion, artist/album extraction, SoundCloud sample conversion, preview exclusion, widget lifecycle');
