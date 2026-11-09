@@ -8,6 +8,8 @@ extension App {
     func startSelfTestIfRequested() {
         let env = ProcessInfo.processInfo.environment
         if env["CADENCE_LEGACY"] != nil { browseScript = "" }
+        // CADENCE_APPEARANCE=light|dark previews one palette regardless of the system setting.
+        if let look = env["CADENCE_APPEARANCE"] { window.appearance = NSAppearance(named: look == "dark" ? .darkAqua : .aqua) }
         guard env["CADENCE_SELFTEST"] != nil else { return }
         let dir = URL(fileURLWithPath: env["CADENCE_SELFTEST_DIR"] ?? NSTemporaryDirectory())
         let steps: [(String, String)] = [
@@ -18,6 +20,8 @@ extension App {
             ("library", "navigate('library')"),
             ("explore", "navigate('youtube')"),
             ("back-to-search", "search('radiohead')"),
+            ("discover", "navigate('discover')"),
+            ("connections", "navigate('settings')"),
         ]
         func run(_ index: Int) {
             guard index < steps.count else { debug("selftest done"); NSApp.terminate(nil); return }

@@ -65,6 +65,8 @@ These account actions use the same signed-in service page as the catalog. Sessio
 
 ## Custom music interface
 
+Cadence follows the Mac’s Light/Dark setting. Light Mode uses the original lavender look; Dark Mode uses a softer plum-gray palette (darker, never black). For the live self-test, `CADENCE_APPEARANCE=light` or `dark` previews either one.
+
 Home, Explore, Library, search results, albums/collections, track lists, the Up Next queue, and the bottom player are Cadence’s interface. YouTube Music’s website is no longer shown inside the normal listening view.
 
 - **Search:** type in the top search field and press Return. Filter the displayed results by Songs, Albums, Artists, or Playlists. Click an album, artist, or collection to browse its contents.

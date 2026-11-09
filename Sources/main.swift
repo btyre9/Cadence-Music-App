@@ -65,7 +65,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         for (title, action, key) in [("Undo", "undo:", "z"), ("Cut", "cut:", "x"), ("Copy", "copy:", "c"), ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a")] { edit.addItem(withTitle: title, action: Selector(action), keyEquivalent: key) }
         NSApp.mainMenu = menu
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 820), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "Cadence"; window.minSize = NSSize(width: 1040, height: 680); window.center(); window.appearance = NSAppearance(named: .aqua)
+        window.title = "Cadence"; window.minSize = NSSize(width: 1040, height: 680); window.center() // Follows the system Light/Dark setting; style.css supplies both palettes.
         let configuration = WKWebViewConfiguration(); configuration.userContentController.add(self, name: "cadence")
         shell = WKWebView(frame: window.contentView!.bounds, configuration: configuration)
         shell.autoresizingMask = [.width, .height]; shell.navigationDelegate = self; shell.uiDelegate = self
