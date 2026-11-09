@@ -21,3 +21,4 @@ node --check Resources/music-info.js
 node Tests/now-release.cjs
 node Tests/radio-navigation.cjs
 node Tests/radio-save.cjs
+node Tests/browse.cjs

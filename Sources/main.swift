@@ -44,6 +44,12 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     var volumeDirty = true
     var lastHistorySample = Date.distantPast
     var historyTimer: Timer?
+    // Catalog pages are read from YouTube Music's data service inside one booted service page.
+    var browseScript = ""
+    var catalogBooted = false
+    var catalogQueued: URL?
+    var catalogReadyTimer: Timer?
+    let debugTiming = ProcessInfo.processInfo.environment["CADENCE_DEBUG"] != nil
     func applicationDidFinishLaunching(_ notification: Notification) {
         history.onChange = { [weak self] state in self?.send("history", state) }
         radioSnapshotScript = (try? String(contentsOf: Bundle.main.url(forResource: "radio-snapshot", withExtension: "js")!, encoding: .utf8)) ?? ""
@@ -51,6 +57,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         libraryScript = (try? String(contentsOf: Bundle.main.url(forResource: "youtube-library", withExtension: "js")!, encoding: .utf8)) ?? ""
         catalogScript = (try? String(contentsOf: Bundle.main.url(forResource: "youtube-catalog", withExtension: "js")!, encoding: .utf8)) ?? ""
         sampleScript = (try? String(contentsOf: Bundle.main.url(forResource: "youtube-sample", withExtension: "js")!, encoding: .utf8)) ?? ""
+        browseScript = (try? String(contentsOf: Bundle.main.url(forResource: "youtube-browse", withExtension: "js")!, encoding: .utf8)) ?? ""
         let menu = NSMenu(); let item = NSMenuItem(); menu.addItem(item)
         let appMenu = NSMenu(); appMenu.addItem(withTitle: "About Cadence", action: #selector(about), keyEquivalent: "")
         appMenu.addItem(.separator()); appMenu.addItem(withTitle: "Quit Cadence", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"); item.submenu = appMenu
@@ -66,6 +73,10 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         let url = Bundle.main.url(forResource: "index", withExtension: "html")!
         shell.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        // Start both music engines right away so the first page and first song don't wait for them.
+        bootCatalog()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.prewarmPlayer() }
+        startSelfTestIfRequested()
         historyTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in Task { @MainActor in self?.history.tick() } }
         timer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: true) { [weak self] _ in Task { @MainActor in self?.updateTrack() } }
     }
@@ -134,7 +145,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         case "toggle": youtube?.evaluateJavaScript("(()=>{const v=document.querySelector('video');if(v){v.paused?v.play():v.pause()}})()", completionHandler: nil)
         case "next": youtube?.evaluateJavaScript("document.querySelector('ytmusic-player-bar .next-button')?.click()", completionHandler: nil)
         case "previous": youtube?.evaluateJavaScript("document.querySelector('ytmusic-player-bar .previous-button')?.click()", completionHandler: nil)
-        case "reload": if let url = catalog?.url { loadCatalog(url) }
+        case "reload": if let url = URL(string: catalogExpectedURL), validatedMusicURL(catalogExpectedURL) != nil { loadCatalog(url) }
         case "back": youtube?.goBack()
         case "external":
             if let raw = body["url"] as? String, let u = URL(string: raw), u.scheme == "https", let host = u.host, ["music.youtube.com", "listenbrainz.org", "soundcloud.com", "musicbrainz.org"].contains(host) { NSWorkspace.shared.open(u) }
@@ -242,11 +253,70 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             }
         }
     }
+    func bootCatalog() {
+        ensureCatalog()
+        if catalog.url == nil && !catalog.isLoading { catalog.load(URLRequest(url: URL(string: "https://music.youtube.com/")!)) }
+    }
+    // The data service is usable as soon as YouTube Music's config exists, long before the page finishes loading.
+    func watchCatalogReady() {
+        guard catalogReadyTimer == nil else { return }
+        catalogReadyTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                guard self.catalogQueued != nil else { self.catalogReadyTimer?.invalidate(); self.catalogReadyTimer = nil; return }
+                self.catalog.evaluateJavaScript("location.host==='music.youtube.com'&&!!window.ytcfg?.get?.('INNERTUBE_CONTEXT')?.client") { value, _ in
+                    guard value as? Bool == true, let queued = self.catalogQueued else { return }
+                    self.catalogReadyTimer?.invalidate(); self.catalogReadyTimer = nil
+                    self.catalogQueued = nil; self.catalogBooted = true
+                    self.debug("catalog engine usable \(Int(Date().timeIntervalSince(self.catalogStarted) * 1000))ms after request (still loading: \(self.catalog.isLoading))")
+                    self.browseAPI(queued, version: self.catalogVersion)
+                }
+            }
+        }
+    }
+    func prewarmPlayer() {
+        guard youtube == nil else { return }
+        ensurePlayer(); youtube.load(URLRequest(url: URL(string: "https://music.youtube.com/")!)); loadedYouTube = true
+    }
+    func debug(_ message: String) { if debugTiming { FileHandle.standardError.write(Data("[cadence] \(message)\n".utf8)) } }
     func loadCatalog(_ url: URL) {
         ensureCatalog()
+        catalogTimer?.invalidate(); catalogPending = false; catalogQueued = nil
+        catalogVersion += 1; catalogExpectedURL = url.absoluteString; catalogReported = false; catalogStarted = Date()
+        send("catalog-loading", ["url": url.absoluteString])
+        if browseScript.isEmpty { loadCatalogPage(url) }
+        else if catalogBooted && !catalog.isLoading { browseAPI(url, version: catalogVersion) }
+        else if catalog.isLoading || catalog.url == nil { catalogQueued = url; bootCatalog(); watchCatalogReady() }
+        else { loadCatalogPage(url) } // The engine ended up somewhere else (e.g. a consent page): use the website.
+    }
+    // Reads a page through the data service; falls back to loading and scraping the website.
+    func browseAPI(_ url: URL, version: Int, more token: String? = nil) {
+        let started = Date()
+        let request: [String: Any] = token.map { ["op": "more", "token": $0] } ?? ["op": "load", "url": url.absoluteString]
+        catalog.callAsyncJavaScript(browseScript, arguments: ["request": request], in: nil, in: .page) { [weak self] result in
+            guard let self, self.catalogVersion == version else { return }
+            let ms = Int(Date().timeIntervalSince(started) * 1000)
+            guard case .success(let value) = result, let output = value as? [String: Any] else {
+                self.debug("api error \(url.absoluteString) \(ms)ms; falling back"); if token == nil { self.loadCatalogPage(url) }; return
+            }
+            guard output["ok"] as? Bool == true, var data = output["data"] as? [String: Any] else {
+                let message = output["message"] as? String ?? ""
+                self.debug("api failed \(url.absoluteString) \(ms)ms: \(message)")
+                if token != nil { return }
+                if output["empty"] as? Bool == true { self.send("catalog-error", message) } else { self.loadCatalogPage(url) }
+                return
+            }
+            let sections = data["sections"] as? [[String: Any]] ?? []
+            self.debug("api \(token == nil ? "page" : "more") \(url.absoluteString) \(ms)ms total=\(Int(Date().timeIntervalSince(self.catalogStarted) * 1000))ms sections=\(sections.count) items=\(sections.reduce(0) { $0 + (($1["items"] as? [Any])?.count ?? 0) })")
+            data["requestURL"] = url.absoluteString; self.catalogReported = true
+            self.send("catalog-result", data)
+            if output["more"] as? Bool == true, let next = output["token"] as? String { self.browseAPI(url, version: version, more: next) }
+        }
+    }
+    func loadCatalogPage(_ url: URL) {
         catalogTimer?.invalidate(); catalogLastSnapshot = ""; catalogStableCount = 0
-        catalogVersion += 1; catalogExpectedURL = url.absoluteString; catalogPending = true; catalogReported = false; catalogStarted = Date()
-        send("catalog-loading", ["url": url.absoluteString]); catalog.load(URLRequest(url: url))
+        catalogPending = true; catalogReported = false; catalogStarted = Date(); catalogExpectedURL = url.absoluteString
+        catalog.load(URLRequest(url: url))
         catalogTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in Task { @MainActor in self?.pollCatalog() } }
     }
     func pollCatalog() {
@@ -257,6 +327,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             guard self.catalogVersion == version else { return }
             if let data = result as? [String: Any], let groups = data["sections"] as? [[String: Any]], (!groups.isEmpty || !(data["title"] as? String ?? "").isEmpty) {
                 let fingerprint = (try? JSONSerialization.data(withJSONObject: data, options: [.sortedKeys])).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+                if !self.catalogReported { self.debug("website page \(self.catalogExpectedURL) total=\(Int(Date().timeIntervalSince(self.catalogStarted) * 1000))ms sections=\(groups.count)") }
                 if fingerprint == self.catalogLastSnapshot { self.catalogStableCount += 1 } else { self.catalogStableCount = 0 }; if fingerprint != self.catalogLastSnapshot { self.catalogLastSnapshot = fingerprint; var output = data; output["requestURL"] = self.catalogExpectedURL; self.send("catalog-result", output) }
                 self.catalogReported = true
                 // A second pass captures deferred sections/artwork, without blocking initial results.
@@ -297,11 +368,19 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         }
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        if webView === catalog { pollCatalog() }
+        if webView === catalog {
+            catalogBooted = webView.url?.host == "music.youtube.com"
+            if let queued = catalogQueued {
+                catalogQueued = nil
+                debug("catalog engine ready \(Int(Date().timeIntervalSince(catalogStarted) * 1000))ms after request")
+                if catalogBooted { browseAPI(queued, version: catalogVersion) } else { loadCatalogPage(queued) }
+            }
+            pollCatalog()
+        }
         if webView === youtube { volumeDirty = true; updateTrack() }
     }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        if webView === catalog, (error as NSError).code != NSURLErrorCancelled { send("catalog-error", "Couldn’t load music. Check your connection and try again."); catalogPending = false }
+        if webView === catalog, (error as NSError).code != NSURLErrorCancelled { send("catalog-error", "Couldn’t load music. Check your connection and try again."); catalogPending = false; catalogQueued = nil }
         if webView === youtube, (error as NSError).code != NSURLErrorCancelled { send("notice", "YouTube Music couldn’t load. Check your connection, or use Account to sign in.") }
     }
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {

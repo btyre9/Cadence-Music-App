@@ -13,6 +13,8 @@
    const browse = links.find(a=>a.href.includes('/browse/'));
    const playlist = links.find(a=>a.href.includes('/playlist?'));
    const channel = links.find(a=>a.href.includes('/channel/'));
+   // Music only: skip podcast shows, episodes, and the Podcasts section.
+   if(links.some(a=>/\/browse\/(MPSP|MPED|FEmusic_non_music_audio|VLSE$)|[?&]list=SE(&|$)/.test(a.href))) return null;
    const primary = watch || browse || playlist || channel;
    if(!primary) return null;
    const url = absolute(primary.getAttribute('href')); if(!url) return null;
@@ -31,7 +33,7 @@
  const shelves = [...document.querySelectorAll('ytmusic-carousel-shelf-renderer, ytmusic-shelf-renderer, ytmusic-playlist-shelf-renderer, ytmusic-grid-renderer')];
  const sections = []; const allSeen = new Set();
  for(const shelf of shelves){
-   const rows = [...shelf.querySelectorAll('ytmusic-two-row-item-renderer, ytmusic-responsive-list-item-renderer, ytmusic-multi-row-list-item-renderer')];
+   const rows = [...shelf.querySelectorAll('ytmusic-two-row-item-renderer, ytmusic-responsive-list-item-renderer')];
    const items = rows.map(item).filter(Boolean).filter(i=>{const key=i.url+'|'+i.title;if(allSeen.has(key))return false;allSeen.add(key);return true;});
    if(items.length) sections.push({title:text(shelf.querySelector('h2'))||clean((shelf.data?.title?.runs||[]).map(r=>r.text||'').join(''))||(items.every(i=>i.kind==='song')?'Tracks':'Browse'),items:items.slice(0,60)});
  }
