@@ -130,6 +130,9 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             }
         case "library-request":
             if let request = body["request"] as? [String: Any] { libraryRequest(request) }
+        case "lyrics":
+            if let id = body["id"] as? String, id.range(of: "^[A-Za-z0-9_-]{6,40}$", options: .regularExpression) != nil,
+               let requestID = body["requestID"] as? String, requestID.count < 100 { lyrics(id: id, requestID: requestID) }
         case "like":
             if let id = body["id"] as? String, id.range(of: "^[A-Za-z0-9_-]{6,40}$", options: .regularExpression) != nil, let liked = body["liked"] as? Bool { likeSong(id: id, liked: liked) }
         case "catalog":
@@ -234,6 +237,18 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             alert.alertStyle = .warning; alert.addButton(withTitle: "Cancel"); alert.addButton(withTitle: "Delete playlist")
             alert.beginSheetModal(for: window) { response in if response == .alertSecondButtonReturn { run() } else { self.send("library-result", ["ok": false, "op": op, "message": "Deletion cancelled."]) } }
         } else { run() }
+    }
+    // Lyrics are read from YouTube Music's data service in the catalog engine, like other pages.
+    func lyrics(id: String, requestID: String) {
+        guard !browseScript.isEmpty, let catalog, catalogBooted, catalog.url?.host == "music.youtube.com" else {
+            send("lyrics-result", ["ok": false, "id": id, "requestID": requestID, "message": "YouTube Music is still loading. Open the Lyrics tab again in a moment."]); return
+        }
+        catalog.callAsyncJavaScript(browseScript, arguments: ["request": ["op": "lyrics", "videoId": id]], in: nil, in: .page) { [weak self] result in
+            var output: [String: Any] = ["ok": false, "message": "Lyrics are temporarily unavailable. Open the Lyrics tab again to retry."]
+            if case .success(let value) = result, let value = value as? [String: Any] { output = value }
+            output["id"] = id; output["requestID"] = requestID
+            self?.send("lyrics-result", output)
+        }
     }
     // Hearts on YouTube songs also like/unlike them in the signed-in YouTube Music account.
     func likeSong(id: String, liked: Bool) {

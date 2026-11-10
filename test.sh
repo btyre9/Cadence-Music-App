@@ -26,3 +26,4 @@ node --check Resources/media-session-bridge.js
 node Tests/media-controls.cjs
 node Tests/likes.cjs
 node Tests/saved-queue.cjs
+node Tests/lyrics.cjs

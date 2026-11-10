@@ -168,7 +168,21 @@ async function fetchMore(state){
 }
 const hasMore=state=>!!state.tracks||(!!state.sections&&state.sectionPages<EXTRA_SECTION_PAGES);
 
+// Lyrics come from the song's Lyrics tab in YouTube Music, the same text its website shows.
+async function lyrics(videoId){
+ if(typeof videoId!=='string'||!/^[A-Za-z0-9_-]{6,40}$/.test(videoId))return{ok:false,message:'Choose a YouTube Music song.'};
+ const none='No lyrics are available for this song.';
+ const {data:watch}=await api('next',{videoId,isAudioOnly:true});
+ const browseId=find(watch,'tabRenderer').map(t=>!t.unselectable&&t.endpoint?.browseEndpoint?.browseId).find(id=>typeof id==='string'&&/^MPLY/.test(id));
+ if(!browseId)return{ok:true,lyrics:'',message:none};
+ const {data}=await api('browse',{browseId});
+ const shelf=find(data,'musicDescriptionShelfRenderer')[0];
+ const text=runs(shelf?.description).replace(/\r\n?/g,'\n').trim();
+ if(!text)return{ok:true,lyrics:'',message:clean(runs(find(data,'messageRenderer')[0]?.text))||none};
+ return{ok:true,lyrics:text.slice(0,20000),source:clean(runs(shelf.footer)).slice(0,200)};
+}
 async function execute(request){
+ if(request.op==='lyrics')return lyrics(request.videoId);
  const store=window.__cadenceBrowse||(window.__cadenceBrowse={});
  if(request.op==='more'){
   const state=store[request.token];if(!state)return{ok:false,message:'Expired.'};
