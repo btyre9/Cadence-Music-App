@@ -29,9 +29,9 @@ assert.equal(vm.runInContext('[current,...queue].filter(t=>t.id==="BBBBBBB2").le
 vm.runInContext(`toggleShuffle();repeatMode='all';queue=[];nextTrack();`,context);
 assert.equal(calls.at(-1).id,'AAAAAAA1','Repeat all restarts the original playlist order');
 vm.runInContext(`repeatMode='one';pendingTrackId='';current={id:'AAAAAAA1',title:'A',kind:'song'};queue=[{id:'BBBBBBB2',title:'B',kind:'song'}];lastDuration=100;lastPosition=99;`,context);
-const before=calls.length;
+const playbackCalls=()=>calls.filter(c=>c.action!=='now-playing').length,before=playbackCalls();
 vm.runInContext(`window.receive({event:'track',payload:{id:'AAAAAAA1',title:'A',artist:'Artist',playing:false,ended:true,position:100,duration:100}});`,context);
-assert.equal(calls.length,before,'Repeat one leaves the queue untouched for the native media loop');
+assert.equal(playbackCalls(),before,'Repeat one leaves the queue untouched for the native media loop');
 assert.equal(vm.runInContext('queue.length',context),1);
 vm.runInContext(`repeatMode='off';cycleRepeat();cycleRepeat();`,context);
 assert.equal(calls.at(-1).action,'repeat-one');assert.equal(calls.at(-1).enabled,true);

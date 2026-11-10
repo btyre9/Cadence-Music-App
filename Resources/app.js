@@ -29,6 +29,31 @@ function addQueue(t){queue.push(t);if(playlistCycle.length)playlistCycle.push(t)
 function shuffled(list){const result=[...list];for(let i=result.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[result[i],result[j]]=[result[j],result[i]];}return result;}
 function startPlaylist(songs,mix=shuffleOn){if(!songs.length)return;playlistCycle=[...songs];shuffleOn=mix;const order=mix?shuffled(songs):[...songs];queue=order.slice(1);playTrack(order[0],true);updateModes();}
 function nextTrack(){if(!queue.length&&repeatMode==='all'&&playlistCycle.length){const order=shuffleOn?shuffled(playlistCycle):[...playlistCycle];queue=order;}if(queue.length){const t=queue.shift();playTrack(t,true);}else native('next');renderQueue();}
+function previousTrack(){if(played.length){const prior=played.pop();current=null;playTrack(prior,true);}else native('previous');}
+// Media keys, AirPods, and Control Center. YouTube commands run exactly like the footer buttons; SoundCloud uses its widget.
+let lastRemote={command:'',time:0},nowPlayingSent=null;
+function remoteCommand(command,position){
+ const now=Date.now();if(command!=='seek'&&command===lastRemote.command&&now-lastRemote.time<350)return;lastRemote={command,time:now};
+ if(source==='soundcloud'){const w=typeof soundcloudWidget==='function'?soundcloudWidget():null;if(!w)return;
+  if(command==='play')w.play();else if(command==='pause')w.pause();else if(command==='toggle')w.toggle();else if(command==='next')w.next();else if(command==='previous')w.prev();else if(command==='seek'&&Number.isFinite(position))w.seekTo(Math.max(0,position)*1000);return;}
+ if(source!=='youtube')return;
+ if(command==='play'){playing=true;updateControls();native('play');}
+ else if(command==='pause'){playing=false;updateControls();native('pause');}
+ else if(command==='toggle')$('toggle').onclick();
+ else if(command==='next')nextTrack();
+ else if(command==='previous')previousTrack();
+ else if(command==='seek'&&Number.isFinite(position)&&position>=0&&!$('seek').disabled){native('seek',{seconds:position});$('seek').value=position;$('elapsed').textContent=formatTime(position);}
+}
+// Larger artwork for Now Playing than the footer thumbnail.
+function hiResArt(raw){if(!raw)return '';try{const u=new URL(raw);if(u.protocol!=='https:')return '';if(/(^|\.)googleusercontent\.com$/.test(u.hostname))return raw.replace(/=w\d+-h\d+([-a-z0-9]*)$/i,'=w544-h544$1');if(/(^|\.)sndcdn\.com$/.test(u.hostname))return raw.replace(/-(large|t\d+x\d+|crop)\.(jpg|png)$/,'-t500x500.$2');return raw;}catch{return '';}}
+// Tells macOS what's playing. Unchanged updates are skipped; the system advances the clock itself while playing.
+function reportNowPlaying(info){
+ const position=Number.isFinite(info.position)?info.position:0,duration=Number.isFinite(info.duration)?info.duration:0,now=Date.now();
+ const key=JSON.stringify([info.title,info.artist,info.album||'',info.art||'',Math.round(duration),!!info.playing,!!info.canSeek]);
+ if(nowPlayingSent&&nowPlayingSent.key===key){const expected=nowPlayingSent.position+(info.playing?(now-nowPlayingSent.time)/1000:0);if(Math.abs(position-expected)<2)return;}
+ nowPlayingSent={key,position,time:now};
+ native('now-playing',{title:info.title,artist:info.artist||'',album:info.album||'',art:info.art||'',duration,position,playing:!!info.playing,canSeek:!!info.canSeek});
+}
 function updateModes(){$('shuffle').classList.toggle('mode-active',shuffleOn);$('shuffle').setAttribute('aria-pressed',String(shuffleOn));$('repeat').classList.toggle('mode-active',repeatMode!=='off');$('repeat').textContent=repeatMode==='one'?'↻¹':'↻';$('repeat').setAttribute('aria-label','Repeat: '+repeatMode+'; click to change');$('repeat').setAttribute('aria-pressed',String(repeatMode!=='off'));}
 function cycleRepeat(){repeatMode=repeatMode==='off'?'all':repeatMode==='all'?'one':'off';native('repeat-one',{enabled:repeatMode==='one'});updateModes();toast(repeatMode==='one'?'Repeat this song':repeatMode==='all'?'Repeat playlist / queue':'Repeat off');}
 function toggleShuffle(){shuffleOn=!shuffleOn;if(shuffleOn){if(!playlistCycle.length&&current)playlistCycle=[current,...queue];queue=shuffled(queue);}else if(playlistCycle.length){const remaining=[...queue];queue=[];for(const t of playlistCycle){const i=remaining.findIndex(x=>x===t);if(i>=0)queue.push(...remaining.splice(i,1));}queue.push(...remaining);}updateModes();renderQueue();}
@@ -67,6 +92,7 @@ window.receive=({event,payload})=>{
  if(event==='recommendations'){if(!waiting)return;finishWaiting();tracks=payload;$('rec-state').hidden=true;renderTracks($('recommendations'),tracks);}
  if(event==='error'){if(!waiting)return;finishWaiting();$('rec-state').hidden=false;$('rec-state').replaceChildren(el('h2','','A small pause in discovery.'),el('p','',payload));}
  if(event==='notice')toast(payload);
+ if(event==='remote'&&typeof payload?.command==='string')remoteCommand(payload.command,payload.position);
  if(event==='engine'){$('now-artist').textContent='Starting playback…';}
  if(event==='track'&&source==='youtube'){
   if(pendingTrackId&&payload.id!==pendingTrackId&&Date.now()-pendingSince<12000&&!payload.error)return;
@@ -74,7 +100,10 @@ window.receive=({event,payload})=>{
   if(payload.title&&!payload.ad){updateNowRelease(payload);$('now-title').textContent=payload.title;$('now-artist').textContent=payload.artist||'YouTube Music';}
   if(payload.ad)$('now-artist').textContent='YouTube advertisement · your song follows';
   if(payload.error){$('now-artist').textContent=payload.error;}
-  playing=payload.playing;updateControls();if(Number.isFinite(payload.volume)&&document.activeElement!==$('volume-value'))$('volume-value').value=Math.round(payload.volume*100);
+  playing=payload.playing;updateControls();
+  {const title=payload.ad?'YouTube advertisement':payload.title||current?.title||'',artist=payload.ad?'Your song follows':payload.artist||current?.artist||'YouTube Music';
+   if(title&&!payload.error)reportNowPlaying({title,artist,album:payload.ad?'':payload.album||'',art:payload.ad?'':hiResArt(payload.art||current?.art||''),duration:payload.duration,position:payload.position,playing:payload.playing,canSeek:!payload.ad&&payload.duration>0});}
+  if(Number.isFinite(payload.volume)&&document.activeElement!==$('volume-value'))$('volume-value').value=Math.round(payload.volume*100);
   if(payload.duration>0){$('seek').disabled=!!payload.ad;$('seek').max=payload.duration;if(!seeking)$('seek').value=payload.position;$('elapsed').textContent=formatTime(payload.position);$('duration').textContent=formatTime(payload.duration);}
   const nearEnd=lastDuration>0&&lastPosition>=lastDuration-3;
   const changedSong=current&&payload.id&&payload.id!==current.id&&!payload.ad;
@@ -91,7 +120,7 @@ $('catalog-refresh').onclick=()=>browse(catalogURL,false,true);$('catalog-back')
 $('yt-account').onclick=$('catalog-account').onclick=$('settings-yt-account').onclick=()=>native('account');
 $('queue-tab').onclick=()=>{railTab='queue';renderQueue();};$('saved-tab').onclick=()=>{railTab='saved';renderQueue();};$('clear-queue').onclick=()=>{queue=[];playlistCycle=current?[current]:[];renderQueue();};
 $('create-radio').onclick=()=>{if(source!=='youtube'||!current?.id)return;radioSeed={...current};radioMode=true;queue=[];playlistCycle=[];repeatMode='off';shuffleOn=false;native('repeat-one',{enabled:false});native('start-radio',{id:current.id});updateModes();renderQueue();toast(`Creating a station based on ${current.title}…`);};
-$('toggle').onclick=()=>{playing=!playing;updateControls();native('toggle');};$('shuffle').onclick=toggleShuffle;$('repeat').onclick=cycleRepeat;$('next').onclick=nextTrack;$('previous').onclick=()=>{if(played.length){const prior=played.pop();current=null;playTrack(prior,true);}else native('previous');};
+$('toggle').onclick=()=>{playing=!playing;updateControls();native('toggle');};$('shuffle').onclick=toggleShuffle;$('repeat').onclick=cycleRepeat;$('next').onclick=nextTrack;$('previous').onclick=previousTrack;
 $('seek').oninput=()=>{seeking=true;};$('seek').onchange=e=>{native('seek',{seconds:Number(e.target.value)});seeking=false;};$('volume').value=read('cadence.volume',0.35);$('volume-value').value=Math.round(Number($('volume').value)*100);$('volume-value').onchange=e=>{const n=Number(e.target.value);if(!Number.isFinite(n))return;const volume=Math.max(0,Math.min(100,n))/100;$('volume').value=volume;write('cadence.volume',volume);native('volume',{volume});};$('volume').oninput=e=>{const volume=Number(e.target.value);$('volume-value').value=Math.round(volume*100);write('cadence.volume',volume);native('volume',{volume});};
 $('username').value=read('cadence.username','');
 $('recommend-form').onsubmit=e=>{e.preventDefault();const username=$('username').value.trim();if(!username)return;write('cadence.username',username);waiting=true;$('fetch-recs').disabled=true;$('fetch-recs').textContent='Finding your next favorites…';tracks=[];$('recommendations').replaceChildren();$('rec-state').hidden=false;$('rec-state').textContent='Fetching recommendations…';native('recommend',{username});clearTimeout(recTimer);recTimer=setTimeout(()=>window.receive({event:'error',payload:'The request timed out. Please try again.'}),60000);};

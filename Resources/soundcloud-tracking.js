@@ -1,12 +1,15 @@
 'use strict';
 // Official widget events/getters are used instead of inspecting the remote iframe.
-let soundcloudGeneration = 0, soundcloudTimer;
-function stopSoundCloudTracking() { soundcloudGeneration++; clearInterval(soundcloudTimer); }
+let soundcloudGeneration = 0, soundcloudTimer, soundcloudWidgetInstance = null;
+function stopSoundCloudTracking() { soundcloudGeneration++; clearInterval(soundcloudTimer); soundcloudWidgetInstance = null; }
+// Media keys and Control Center control the current SoundCloud player through its official widget API.
+function soundcloudWidget() { return soundcloudWidgetInstance; }
 function attachSoundCloudTracking(frame) {
   stopSoundCloudTracking();
   const generation = soundcloudGeneration;
   if (!window.SC?.Widget) { toast('SoundCloud tracking helper could not load. Playback remains available.'); return; }
   const widget = SC.Widget(frame);
+  soundcloudWidgetInstance = widget;
   let busy = false;
   function sample() {
     if (busy || generation !== soundcloudGeneration || !frame.isConnected) return;
@@ -25,7 +28,7 @@ function attachSoundCloudTracking(frame) {
             const seconds = duration/1000;
             const eligible = sound.streamable !== false && sound.policy !== 'SNIP' && sound.policy !== 'BLOCK' && duration >= 30000 && (!sound.duration || duration >= sound.duration * 0.9);
             native('history-sample',{sample:{source:'soundcloud',id:String(sound.id||sound.urn||url),title,artist,album:'',url,duration:seconds,position:position/1000,playing:!paused,eligible}});
-            if(source==='soundcloud'&&title){if(typeof updateNowRelease==='function')updateNowRelease({source:'soundcloud',id:String(sound.id||url),title,artist});$('now-title').textContent=title;$('now-artist').textContent=artist;}
+            if(source==='soundcloud'&&title){if(typeof updateNowRelease==='function')updateNowRelease({source:'soundcloud',id:String(sound.id||url),title,artist});$('now-title').textContent=title;$('now-artist').textContent=artist;if(typeof reportNowPlaying==='function')reportNowPlaying({title,artist:artist||'SoundCloud',album:'',art:hiResArt(sound.artwork_url||''),duration:seconds,position:position/1000,playing:!paused,canSeek:seconds>0});}
           });
         });
       });

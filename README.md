@@ -78,6 +78,12 @@ Home, Explore, Library, search results, albums/collections, track lists, the Up 
 
 Starting YouTube playback stops SoundCloud. Loading or starting SoundCloud pauses YouTube. Browsing albums, Home, Discover, and Library does not interrupt music.
 
+## Media keys, AirPods, and Control Center
+
+The keyboard's play/pause, next, and previous keys, AirPods presses, headphone remotes, and the Now Playing control in Control Center and the menu bar all control Cadence. They behave exactly like the footer buttons: Next uses Cadence's Up Next queue first, then YouTube Music's radio queue, and Previous returns to the song you played before. Scrubbing the Now Playing progress bar seeks within the song (not during ads). Now Playing shows the current song's title, artist, album when known, larger artwork, and progress. While the SoundCloud player is active, the same keys control the SoundCloud widget.
+
+macOS sends media keys to the app that most recently played audio, so another app that starts playing afterwards takes the keys until Cadence plays again. A key pressed twice within about a third of a second counts once.
+
 ## Playback architecture and limits
 
 This is a custom user interface, not a fully independent native YouTube streaming engine. Two internal WebKit service views provide catalog data and Premium playback using your own account session. They render behind the opaque Cadence interface, are excluded from accessibility navigation, and are not exposed as browsing panes. Catalog browsing and audio use separate service views so searches do not replace the currently playing song. No stream extraction, DRM handling, or ad blocking is implemented. YouTube ads, when served, remain audible and are labelled in the custom footer.

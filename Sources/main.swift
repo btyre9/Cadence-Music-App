@@ -49,6 +49,9 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     var catalogBooted = false
     var catalogQueued: URL?
     var catalogReadyTimer: Timer?
+    // Media keys, AirPods, and Control Center (see MediaControls.swift).
+    let media = MediaControls()
+    var mediaSessionScript = ""
     let debugTiming = ProcessInfo.processInfo.environment["CADENCE_DEBUG"] != nil
     func applicationDidFinishLaunching(_ notification: Notification) {
         history.onChange = { [weak self] state in self?.send("history", state) }
@@ -58,6 +61,9 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         catalogScript = (try? String(contentsOf: Bundle.main.url(forResource: "youtube-catalog", withExtension: "js")!, encoding: .utf8)) ?? ""
         sampleScript = (try? String(contentsOf: Bundle.main.url(forResource: "youtube-sample", withExtension: "js")!, encoding: .utf8)) ?? ""
         browseScript = (try? String(contentsOf: Bundle.main.url(forResource: "youtube-browse", withExtension: "js")!, encoding: .utf8)) ?? ""
+        mediaSessionScript = (try? String(contentsOf: Bundle.main.url(forResource: "media-session-bridge", withExtension: "js")!, encoding: .utf8)) ?? ""
+        media.onCommand = { [weak self] command, position in self?.remote(command, position) }
+        media.start()
         let menu = NSMenu(); let item = NSMenuItem(); menu.addItem(item)
         let appMenu = NSMenu(); appMenu.addItem(withTitle: "About Cadence", action: #selector(about), keyEquivalent: "")
         appMenu.addItem(.separator()); appMenu.addItem(withTitle: "Quit Cadence", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"); item.submenu = appMenu
@@ -86,6 +92,12 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     func send(_ event: String, _ payload: Any) {
         guard let data = try? JSONSerialization.data(withJSONObject: ["event": event, "payload": payload]), let json = String(data: data, encoding: .utf8) else { return }
         shell.evaluateJavaScript("window.receive(\(json))", completionHandler: nil)
+    }
+    // Media key / Control Center commands go to the interface, which runs them like the footer buttons.
+    func remote(_ command: String, _ position: Double?) {
+        var payload: [String: Any] = ["command": command]
+        if let position { payload["position"] = position }
+        send("remote", payload)
     }
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame, message.frameInfo.request.url?.isFileURL == true,
@@ -142,6 +154,13 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         case "volume":
             if let volume = body["volume"] as? Double, volume.isFinite { desiredVolume = min(1,max(0,volume)); UserDefaults.standard.set(desiredVolume, forKey: "player.volume"); volumeDirty = true; youtube?.evaluateJavaScript("(()=>{const v=document.querySelector('video');if(v){const p=document.querySelector('#movie_player');if(p?.setVolume)p.setVolume(\(min(1,max(0,volume))*100));else v.volume=\(min(1,max(0,volume)));}})()", completionHandler: nil) }
         case "pause": youtube?.evaluateJavaScript("document.querySelector('video')?.pause()", completionHandler: nil)
+        case "play": youtube?.evaluateJavaScript("(()=>{document.querySelector('video')?.play()})()", completionHandler: nil)
+        case "now-playing":
+            guard let title = body["title"] as? String, let artist = body["artist"] as? String, !title.isEmpty else { return }
+            let number = { (key: String) -> Double in let n = body[key] as? Double ?? 0; return n.isFinite && n >= 0 ? n : 0 }
+            media.update(title: String(title.prefix(500)), artist: String(artist.prefix(500)), album: String((body["album"] as? String ?? "").prefix(500)),
+                         duration: number("duration"), position: number("position"), playing: body["playing"] as? Bool ?? false,
+                         art: String((body["art"] as? String ?? "").prefix(2000)), canSeek: body["canSeek"] as? Bool ?? false)
         case "toggle": youtube?.evaluateJavaScript("(()=>{const v=document.querySelector('video');if(v){v.paused?v.play():v.pause()}})()", completionHandler: nil)
         case "next": youtube?.evaluateJavaScript("document.querySelector('ytmusic-player-bar .next-button')?.click()", completionHandler: nil)
         case "previous": youtube?.evaluateJavaScript("document.querySelector('ytmusic-player-bar .previous-button')?.click()", completionHandler: nil)
@@ -222,6 +241,8 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     func ensurePlayer() {
         guard youtube == nil else { return }
         let config = WKWebViewConfiguration(); config.websiteDataStore = .default(); config.mediaTypesRequiringUserActionForPlayback = []
+        if !mediaSessionScript.isEmpty { config.userContentController.addUserScript(WKUserScript(source: mediaSessionScript, injectionTime: .atDocumentStart, forMainFrameOnly: true)) }
+        config.userContentController.add(MediaSessionBridge { [weak self] command, position in self?.remote(command, position) }, name: "cadenceMedia")
         youtube = InternalServiceView(frame: NSRect(x: 0, y: 0, width: 1200, height: 800), configuration: config)
         youtube.customUserAgent = serviceUserAgent; youtube.navigationDelegate = self; youtube.uiDelegate = self
         window.contentView!.addSubview(youtube, positioned: .below, relativeTo: shell)
