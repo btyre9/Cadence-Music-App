@@ -130,6 +130,8 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             }
         case "library-request":
             if let request = body["request"] as? [String: Any] { libraryRequest(request) }
+        case "like":
+            if let id = body["id"] as? String, id.range(of: "^[A-Za-z0-9_-]{6,40}$", options: .regularExpression) != nil, let liked = body["liked"] as? Bool { likeSong(id: id, liked: liked) }
         case "catalog":
             if let raw = body["url"] as? String, let url = validatedMusicURL(raw) { loadCatalog(url) }
         case "youtube":
@@ -232,6 +234,18 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             alert.alertStyle = .warning; alert.addButton(withTitle: "Cancel"); alert.addButton(withTitle: "Delete playlist")
             alert.beginSheetModal(for: window) { response in if response == .alertSecondButtonReturn { run() } else { self.send("library-result", ["ok": false, "op": op, "message": "Deletion cancelled."]) } }
         } else { run() }
+    }
+    // Hearts on YouTube songs also like/unlike them in the signed-in YouTube Music account.
+    func likeSong(id: String, liked: Bool) {
+        guard !libraryScript.isEmpty, let catalog, catalog.url?.host == "music.youtube.com" else {
+            send("like-result", ["ok": false, "id": id, "liked": liked, "message": "YouTube Music is still loading. Try the heart again shortly."]); return
+        }
+        catalog.callAsyncJavaScript(libraryScript, arguments: ["request": ["op": liked ? "like-song" : "unlike-song", "videoId": id]], in: nil, in: .page) { [weak self] result in
+            var output: [String: Any] = ["ok": false, "message": "Couldn’t confirm the change with YouTube Music."]
+            if case .success(let value) = result, let value = value as? [String: Any] { output = value }
+            output["id"] = id; output["liked"] = liked
+            self?.send("like-result", output)
+        }
     }
     func validatedMusicURL(_ raw: String) -> URL? {
         guard let u = URL(string: raw), u.scheme == "https", u.host == "music.youtube.com",

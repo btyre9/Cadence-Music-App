@@ -58,6 +58,11 @@ async function execute(request) {
   if(!data.playlistId)throw Error('YouTube did not confirm that the playlist was created. Refresh your library before retrying.');
   return {ok:true,op,url:'https://music.youtube.com/playlist?list='+encodeURIComponent(data.playlistId),title};
  }
+ if(op==='like-song'||op==='unlike-song'){
+  if(typeof request.videoId!=='string'||!/^[A-Za-z0-9_-]{6,40}$/.test(request.videoId))throw Error('Select a valid song.');
+  await api(op==='like-song'?'like/like':'like/removelike',{target:{videoId:request.videoId}});
+  return{ok:true,op,videoId:request.videoId};
+ }
  const info=await inspect(request.url);
  if(op==='inspect')return {ok:true,op,info};
  if(op==='remove-library'){

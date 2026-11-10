@@ -24,3 +24,4 @@ node Tests/radio-save.cjs
 node Tests/browse.cjs
 node --check Resources/media-session-bridge.js
 node Tests/media-controls.cjs
+node Tests/likes.cjs
