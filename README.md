@@ -71,12 +71,24 @@ Home, Explore, Library, search results, albums/collections, track lists, the Up 
 
 - **Search:** type in the top search field and press Return. Filter the displayed results by Songs, Albums, Artists, or Playlists. Click an album, artist, or collection to browse its contents.
 - **Play:** use a track’s play button, title, or the album Play action. The custom footer has play/pause, next/previous, a seek bar, elapsed time, and volume.
-- **Queue:** use + beside a song. The right sidebar plays/removes individual queued tracks; Next consumes the custom queue before falling back to YouTube’s radio queue. Album Play queues the listed tracks. Playlists and albums include up to 1,000 songs; shuffle and repeat-all apply to that loaded set.
+- **Queue:** use + beside a song. The right sidebar plays/removes individual queued tracks; Next consumes the custom queue before falling back to YouTube’s radio queue. Album Play queues the listed tracks. Playlists and albums include up to 1,000 songs; shuffle and repeat-all apply to that loaded set. Up Next, the current song and how far into it you were, shuffle, repeat, and Previous history are kept when you quit. After a restart the song waits paused; press Play (or the play key) to pick up where you left off. A radio station's songs come from YouTube Music, so they aren't kept.
 - **Account:** opens a separate YouTube/Google account window solely for authentication/account management. Close it after signing in, then refresh Cadence’s page. Home/Library use the same signed-in session.
+- **Lyrics:** open the **Lyrics** tab in the right sidebar to read the current song's lyrics from YouTube Music, with its source credit (for example LyricFind). They follow the song as it changes and are cached for the session. Lyrics aren't time-synced, and songs without lyrics in YouTube Music say so. SoundCloud tracks don't have lyrics.
+- **Likes:** the heart on a YouTube song saves it in Cadence and also likes it in your YouTube Music account (it appears in Liked Music on your other devices). Tapping it again removes both. The heart beside the song in the footer shows songs you already liked elsewhere in YouTube Music, and works the same way. If YouTube Music doesn't confirm the change, Cadence keeps its local save and tells you. Hearts on ListenBrainz suggestions and SoundCloud tracks stay local.
 - **Saved:** hearts save discoveries locally. ListenBrainz recommendations open a custom Cadence search so you can choose the correct recording. This is not automatic matching.
 - **SoundCloud:** keeps the official free embedded player as originally requested. Paste a full `https://soundcloud.com/artist/track` or playlist URL and play inside that player. SoundCloud account search/sync is not included. Paid, regional, or embedding-disabled content can be unavailable or previews.
 
 Starting YouTube playback stops SoundCloud. Loading or starting SoundCloud pauses YouTube. Browsing albums, Home, Discover, and Library does not interrupt music.
+
+## Media keys, AirPods, and Control Center
+
+The keyboard's play/pause, next, and previous keys, AirPods presses, headphone remotes, and the Now Playing control in Control Center and the menu bar all control Cadence. They behave exactly like the footer buttons: Next uses Cadence's Up Next queue first, then YouTube Music's radio queue, and Previous returns to the song you played before. Scrubbing the Now Playing progress bar seeks within the song (not during ads). Now Playing shows the current song's title, artist, album when known, larger artwork, and progress. While the SoundCloud player is active, the same keys control the SoundCloud widget.
+
+macOS sends media keys to the app that most recently played audio, so another app that starts playing afterwards takes the keys until Cadence plays again. A key pressed twice within about a third of a second counts once.
+
+## Mini player
+
+Closing the main window no longer quits Cadence. Music keeps playing and a small floating mini player opens with the artwork, title, artist, progress, Previous, Play/Pause, and Next, plus a button to bring the main window back. It stays on top across Spaces and remembers where you put it. Open it any time from **Window ▸ Mini Player** (⌥⌘M), and bring the main window back with **Window ▸ Cadence** (⌘0) or by clicking Cadence in the Dock. Quit Cadence (⌘Q) to stop playback. Closing the mini player while the main window is hidden leaves Cadence playing in the background; click its Dock icon to return.
 
 ## Playback architecture and limits
 
@@ -84,7 +96,7 @@ This is a custom user interface, not a fully independent native YouTube streamin
 
 The separate Account window intentionally shows Google/YouTube for authentication. Google may refuse embedded authentication; a browser’s session does not automatically transfer into Cadence. Existing in-app sessions are retained.
 
-Catalog data comes from YouTube Music’s internal data service (the same one its website uses), called from inside the signed-in catalog engine; the website is used only as a fallback. This is not an official or stable public API. Website changes can break parsing, playback metadata, controls, or pagination. Results can be limited to the items YouTube has loaded. Filter buttons narrow the loaded results rather than issue new service-wide category searches. Artist names on unusual uploads may be incomplete. Song likes, downloads, offline playback, and lyrics are not implemented. Saved discoveries and the custom queue are separate from YouTube’s playlists; the queue resets on restart.
+Catalog data comes from YouTube Music’s internal data service (the same one its website uses), called from inside the signed-in catalog engine; the website is used only as a fallback. This is not an official or stable public API. Website changes can break parsing, playback metadata, controls, or pagination. Results can be limited to the items YouTube has loaded. Filter buttons narrow the loaded results rather than issue new service-wide category searches. Artist names on unusual uploads may be incomplete. Downloads and offline playback are not implemented. Saved discoveries and the custom queue are separate from YouTube’s playlists.
 
 **Clear local preferences & saved discoveries** clears the recommendation username, saved tracks, and saved SoundCloud link. It does not disconnect history tracking or clear Google’s session; use the separate tracking disconnect control.
 

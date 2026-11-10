@@ -18,5 +18,11 @@ async function run(request,browse=fixture(),options={}){const calls=[];const ctx
  r=await run({op:'create-radio-playlist',name:'Seed radio',videoIds:['seed12345','song12345','seed12345']});assert.equal(r.result.ok,true);assert.equal(r.calls[0].body.videoIds.length,2);assert.equal(r.calls[0].body.privacyStatus,'PRIVATE');assert.equal(r.calls.length,1,'Snapshot songs must be in the initial create request');
  r=await run({op:'create-radio-playlist',name:'Seed radio',videoIds:['seed12345']});assert.equal(r.result.ok,false);assert.equal(r.calls.length,0,'Do not create an empty or seed-only playlist');
  r=await run({op:'create-radio-playlist',name:'Seed radio',videoIds:['seed12345','bad value']});assert.equal(r.result.ok,false);assert.equal(r.calls.length,0);
+ r=await run({op:'like-song',videoId:'song12345'});assert.equal(r.result.ok,true);assert.equal(r.calls.length,1,'A like is one request, with no playlist lookup');assert.ok(r.calls[0].url.includes('/youtubei/v1/like/like?'));assert.equal(r.calls[0].body.target.videoId,'song12345');
+ r=await run({op:'unlike-song',videoId:'song12345'});assert.ok(r.calls[0].url.includes('/youtubei/v1/like/removelike?'));assert.equal(r.calls[0].body.target.videoId,'song12345');
+ r=await run({op:'like-song',videoId:'bad id!'});assert.equal(r.result.ok,false);assert.equal(r.calls.length,0);
+ r=await run({op:'like-song',videoId:'song12345'},fixture(),{signedOut:true});assert.equal(r.result.ok,false);assert.equal(r.calls.length,0,'Liking needs a signed-in account');
+ r=await run({op:'like-song',videoId:'song12345'},fixture(),{fail:true});assert.equal(r.result.ok,false);
+ console.log('PASS: song likes and unlikes go to YouTube Music as single signed-in requests; invalid IDs and signed-out sessions send nothing.');
  console.log('PASS: playlist ownership, unsave versus delete, private creation, duplicate song IDs, reorder bounds, description clearing, sign-in rejection, request failures, and credential containment; all requests mocked.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

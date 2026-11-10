@@ -6,7 +6,7 @@ fi
 cd "$(dirname "$0")"
 DEST="${1:-build/Cadence.app}"
 mkdir -p "$DEST/Contents/MacOS" "$DEST/Contents/Resources" build/module-cache
-swiftc -swift-version 5 -O -module-cache-path build/module-cache Sources/*.swift -o "$DEST/Contents/MacOS/Cadence" -framework Cocoa -framework WebKit -framework Security
+swiftc -swift-version 5 -O -module-cache-path build/module-cache Sources/*.swift -o "$DEST/Contents/MacOS/Cadence" -framework Cocoa -framework WebKit -framework Security -framework MediaPlayer
 cp Resources/* "$DEST/Contents/Resources/"
 cp Assets/AppIcon.icns "$DEST/Contents/Resources/"
 cat > "$DEST/Contents/Info.plist" <<'PLIST'

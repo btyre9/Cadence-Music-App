@@ -11,6 +11,8 @@ main{bottom:92px}.sidebar{bottom:92px}.rail{bottom:92px}footer{height:92px;paddi
 .row-info{border:0;padding:3px 4px;font-size:14px;color:#a081ad}.release-info-card{border:1px solid #e5daed;background:#eee6f4;border-radius:8px;padding:16px;margin:12px 0}.release-info-card strong{font-size:14px}.release-info-card button{font-size:10px;margin-top:12px}
 .volume-label #volume-value{width:39px;height:23px;padding:2px;border:0;background:transparent;color:#9d86ae;font-size:10px;accent-color:auto}.volume-label{gap:5px}
 #now-release{display:block;margin-top:5px;border:0;padding:0;background:none;color:#9b6b92;font-size:9px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;max-width:250px;text-align:left}#now-release[hidden]{display:none}.player-extras{gap:4px}#create-radio{padding:4px 9px;font-size:9px;border-color:#d8c7e3;color:#996c9f;border-radius:5px}#create-radio:disabled{opacity:.4}
+#lyrics-panel[hidden]{display:none}.lyrics-text{white-space:pre-wrap;font-size:12px;line-height:1.8;margin:20px 0 12px;overflow-wrap:anywhere}.lyrics-text.lyrics-message{font-size:11px;color:var(--muted);text-align:center;padding-top:40px}#lyrics-source{display:block;font-size:8px;color:#a28dac;margin-bottom:20px}
+.now-like{border:0;padding:4px 6px;font-size:17px;color:#a081ad;flex-shrink:0;background:none}.now-like.liked,.row-save.hearted{color:var(--pink)}.now-like[hidden]{display:none}
 .rail .save-radio{font-size:10px;padding:10px 12px;width:100%;margin:14px 0}
 
 /* Dark Mode: a softer plum-gray palette (darker, never black). Light Mode above is unchanged. */
@@ -81,7 +83,7 @@ footer{background:#251e2c;border-top-color:#3a3043}
 .row-play{color:#e08bb2}
 .song-art{background:linear-gradient(130deg,#46375a,#5a3b4e);color:#c3a6d2}
 .song-duration{color:#a591b0}
-.row-add,.row-save,.row-playlist,.row-info{color:#c09ad0}
+.row-add,.row-save,.row-playlist,.row-info,.now-like{color:#c09ad0}.now-like.liked,.row-save.hearted{color:#f08cb4}
 .album-panel{background:linear-gradient(120deg,#3c3149,#4a3446)}
 .album-cover{background:#4b3d58;color:#c3a6d2;box-shadow:0 9px 25px #00000045}
 .album-copy p{color:#bba9c6}

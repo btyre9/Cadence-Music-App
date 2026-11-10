@@ -8,7 +8,7 @@ final class InternalServiceView: WKWebView {
     override func isAccessibilityElement() -> Bool { false }
 }
 
-final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
+final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     let serviceUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"
     var window: NSWindow!
     var shell: WKWebView!
@@ -49,6 +49,10 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     var catalogBooted = false
     var catalogQueued: URL?
     var catalogReadyTimer: Timer?
+    // Media keys, AirPods, and Control Center (see MediaControls.swift).
+    let media = MediaControls()
+    let mini = MiniPlayer()
+    var mediaSessionScript = ""
     let debugTiming = ProcessInfo.processInfo.environment["CADENCE_DEBUG"] != nil
     func applicationDidFinishLaunching(_ notification: Notification) {
         history.onChange = { [weak self] state in self?.send("history", state) }
@@ -58,13 +62,25 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         catalogScript = (try? String(contentsOf: Bundle.main.url(forResource: "youtube-catalog", withExtension: "js")!, encoding: .utf8)) ?? ""
         sampleScript = (try? String(contentsOf: Bundle.main.url(forResource: "youtube-sample", withExtension: "js")!, encoding: .utf8)) ?? ""
         browseScript = (try? String(contentsOf: Bundle.main.url(forResource: "youtube-browse", withExtension: "js")!, encoding: .utf8)) ?? ""
+        mediaSessionScript = (try? String(contentsOf: Bundle.main.url(forResource: "media-session-bridge", withExtension: "js")!, encoding: .utf8)) ?? ""
+        media.onCommand = { [weak self] command, position in self?.remote(command, position) }
+        media.start()
+        media.onChange = { [weak self] state in self?.mini.update(state) }
+        mini.onCommand = { [weak self] command in self?.remote(command, nil) }
+        mini.onOpenMain = { [weak self] in self?.showMainWindow(); self?.mini.close() }
         let menu = NSMenu(); let item = NSMenuItem(); menu.addItem(item)
         let appMenu = NSMenu(); appMenu.addItem(withTitle: "About Cadence", action: #selector(about), keyEquivalent: "")
         appMenu.addItem(.separator()); appMenu.addItem(withTitle: "Quit Cadence", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"); item.submenu = appMenu
         let editItem = NSMenuItem(); menu.addItem(editItem); let edit = NSMenu(title: "Edit"); editItem.submenu = edit
         for (title, action, key) in [("Undo", "undo:", "z"), ("Cut", "cut:", "x"), ("Copy", "copy:", "c"), ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a")] { edit.addItem(withTitle: title, action: Selector(action), keyEquivalent: key) }
-        NSApp.mainMenu = menu
+        let windowItem = NSMenuItem(); menu.addItem(windowItem); let windowMenu = NSMenu(title: "Window"); windowItem.submenu = windowMenu
+        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(.separator())
+        let miniItem = windowMenu.addItem(withTitle: "Mini Player", action: #selector(toggleMiniPlayer), keyEquivalent: "m"); miniItem.keyEquivalentModifierMask = [.command, .option]
+        windowMenu.addItem(withTitle: "Cadence", action: #selector(showMainWindow), keyEquivalent: "0")
+        NSApp.mainMenu = menu; NSApp.windowsMenu = windowMenu
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 820), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.delegate = self
         window.title = "Cadence"; window.minSize = NSSize(width: 1040, height: 680); window.center() // Follows the system Light/Dark setting; style.css supplies both palettes.
         let configuration = WKWebViewConfiguration(); configuration.userContentController.add(self, name: "cadence")
         shell = WKWebView(frame: window.contentView!.bounds, configuration: configuration)
@@ -82,10 +98,27 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     }
     @objc func about() { NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "Cadence", .applicationVersion: "0.7", .credits: NSAttributedString(string: "A personal music workspace. Interface inspired by Alexis Kiredjian’s YouTube Music Desktop App concept.")]) }
     func applicationWillTerminate(_ notification: Notification) { history.checkpoint() }
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    // Closing the main window keeps the music playing in the mini player; Quit (⌘Q) ends it.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard sender === window else { return true }
+        window.orderOut(nil); mini.show(); return false
+    }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !window.isVisible { showMainWindow() }
+        return true
+    }
+    @objc func showMainWindow() { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
+    @objc func toggleMiniPlayer() { mini.toggle() }
     func send(_ event: String, _ payload: Any) {
         guard let data = try? JSONSerialization.data(withJSONObject: ["event": event, "payload": payload]), let json = String(data: data, encoding: .utf8) else { return }
         shell.evaluateJavaScript("window.receive(\(json))", completionHandler: nil)
+    }
+    // Media key / Control Center commands go to the interface, which runs them like the footer buttons.
+    func remote(_ command: String, _ position: Double?) {
+        var payload: [String: Any] = ["command": command]
+        if let position { payload["position"] = position }
+        send("remote", payload)
     }
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame, message.frameInfo.request.url?.isFileURL == true,
@@ -118,6 +151,11 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             }
         case "library-request":
             if let request = body["request"] as? [String: Any] { libraryRequest(request) }
+        case "lyrics":
+            if let id = body["id"] as? String, id.range(of: "^[A-Za-z0-9_-]{6,40}$", options: .regularExpression) != nil,
+               let requestID = body["requestID"] as? String, requestID.count < 100 { lyrics(id: id, requestID: requestID) }
+        case "like":
+            if let id = body["id"] as? String, id.range(of: "^[A-Za-z0-9_-]{6,40}$", options: .regularExpression) != nil, let liked = body["liked"] as? Bool { likeSong(id: id, liked: liked) }
         case "catalog":
             if let raw = body["url"] as? String, let url = validatedMusicURL(raw) { loadCatalog(url) }
         case "youtube":
@@ -142,6 +180,13 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         case "volume":
             if let volume = body["volume"] as? Double, volume.isFinite { desiredVolume = min(1,max(0,volume)); UserDefaults.standard.set(desiredVolume, forKey: "player.volume"); volumeDirty = true; youtube?.evaluateJavaScript("(()=>{const v=document.querySelector('video');if(v){const p=document.querySelector('#movie_player');if(p?.setVolume)p.setVolume(\(min(1,max(0,volume))*100));else v.volume=\(min(1,max(0,volume)));}})()", completionHandler: nil) }
         case "pause": youtube?.evaluateJavaScript("document.querySelector('video')?.pause()", completionHandler: nil)
+        case "play": youtube?.evaluateJavaScript("(()=>{document.querySelector('video')?.play()})()", completionHandler: nil)
+        case "now-playing":
+            guard let title = body["title"] as? String, let artist = body["artist"] as? String, !title.isEmpty else { return }
+            let number = { (key: String) -> Double in let n = body[key] as? Double ?? 0; return n.isFinite && n >= 0 ? n : 0 }
+            media.update(title: String(title.prefix(500)), artist: String(artist.prefix(500)), album: String((body["album"] as? String ?? "").prefix(500)),
+                         duration: number("duration"), position: number("position"), playing: body["playing"] as? Bool ?? false,
+                         art: String((body["art"] as? String ?? "").prefix(2000)), canSeek: body["canSeek"] as? Bool ?? false)
         case "toggle": youtube?.evaluateJavaScript("(()=>{const v=document.querySelector('video');if(v){v.paused?v.play():v.pause()}})()", completionHandler: nil)
         case "next": youtube?.evaluateJavaScript("document.querySelector('ytmusic-player-bar .next-button')?.click()", completionHandler: nil)
         case "previous": youtube?.evaluateJavaScript("document.querySelector('ytmusic-player-bar .previous-button')?.click()", completionHandler: nil)
@@ -214,6 +259,30 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             alert.beginSheetModal(for: window) { response in if response == .alertSecondButtonReturn { run() } else { self.send("library-result", ["ok": false, "op": op, "message": "Deletion cancelled."]) } }
         } else { run() }
     }
+    // Lyrics are read from YouTube Music's data service in the catalog engine, like other pages.
+    func lyrics(id: String, requestID: String) {
+        guard !browseScript.isEmpty, let catalog, catalogBooted, catalog.url?.host == "music.youtube.com" else {
+            send("lyrics-result", ["ok": false, "id": id, "requestID": requestID, "message": "YouTube Music is still loading. Open the Lyrics tab again in a moment."]); return
+        }
+        catalog.callAsyncJavaScript(browseScript, arguments: ["request": ["op": "lyrics", "videoId": id]], in: nil, in: .page) { [weak self] result in
+            var output: [String: Any] = ["ok": false, "message": "Lyrics are temporarily unavailable. Open the Lyrics tab again to retry."]
+            if case .success(let value) = result, let value = value as? [String: Any] { output = value }
+            output["id"] = id; output["requestID"] = requestID
+            self?.send("lyrics-result", output)
+        }
+    }
+    // Hearts on YouTube songs also like/unlike them in the signed-in YouTube Music account.
+    func likeSong(id: String, liked: Bool) {
+        guard !libraryScript.isEmpty, let catalog, catalog.url?.host == "music.youtube.com" else {
+            send("like-result", ["ok": false, "id": id, "liked": liked, "message": "YouTube Music is still loading. Try the heart again shortly."]); return
+        }
+        catalog.callAsyncJavaScript(libraryScript, arguments: ["request": ["op": liked ? "like-song" : "unlike-song", "videoId": id]], in: nil, in: .page) { [weak self] result in
+            var output: [String: Any] = ["ok": false, "message": "Couldn’t confirm the change with YouTube Music."]
+            if case .success(let value) = result, let value = value as? [String: Any] { output = value }
+            output["id"] = id; output["liked"] = liked
+            self?.send("like-result", output)
+        }
+    }
     func validatedMusicURL(_ raw: String) -> URL? {
         guard let u = URL(string: raw), u.scheme == "https", u.host == "music.youtube.com",
               ["/", "/search", "/explore", "/library", "/playlist", "/new_releases"].contains(u.path) || (u.path.hasPrefix("/browse/") || u.path.hasPrefix("/channel/")) else { return nil }
@@ -222,6 +291,8 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     func ensurePlayer() {
         guard youtube == nil else { return }
         let config = WKWebViewConfiguration(); config.websiteDataStore = .default(); config.mediaTypesRequiringUserActionForPlayback = []
+        if !mediaSessionScript.isEmpty { config.userContentController.addUserScript(WKUserScript(source: mediaSessionScript, injectionTime: .atDocumentStart, forMainFrameOnly: true)) }
+        config.userContentController.add(MediaSessionBridge { [weak self] command, position in self?.remote(command, position) }, name: "cadenceMedia")
         youtube = InternalServiceView(frame: NSRect(x: 0, y: 0, width: 1200, height: 800), configuration: config)
         youtube.customUserAgent = serviceUserAgent; youtube.navigationDelegate = self; youtube.uiDelegate = self
         window.contentView!.addSubview(youtube, positioned: .below, relativeTo: shell)
