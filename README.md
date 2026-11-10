@@ -86,6 +86,10 @@ The keyboard's play/pause, next, and previous keys, AirPods presses, headphone r
 
 macOS sends media keys to the app that most recently played audio, so another app that starts playing afterwards takes the keys until Cadence plays again. A key pressed twice within about a third of a second counts once.
 
+## Mini player
+
+Closing the main window no longer quits Cadence. Music keeps playing and a small floating mini player opens with the artwork, title, artist, progress, Previous, Play/Pause, and Next, plus a button to bring the main window back. It stays on top across Spaces and remembers where you put it. Open it any time from **Window ▸ Mini Player** (⌥⌘M), and bring the main window back with **Window ▸ Cadence** (⌘0) or by clicking Cadence in the Dock. Quit Cadence (⌘Q) to stop playback. Closing the mini player while the main window is hidden leaves Cadence playing in the background; click its Dock icon to return.
+
 ## Playback architecture and limits
 
 This is a custom user interface, not a fully independent native YouTube streaming engine. Two internal WebKit service views provide catalog data and Premium playback using your own account session. They render behind the opaque Cadence interface, are excluded from accessibility navigation, and are not exposed as browsing panes. Catalog browsing and audio use separate service views so searches do not replace the currently playing song. No stream extraction, DRM handling, or ad blocking is implemented. YouTube ads, when served, remain audible and are labelled in the custom footer.

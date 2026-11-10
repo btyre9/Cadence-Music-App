@@ -2,11 +2,24 @@ import Cocoa
 import MediaPlayer
 import WebKit
 
+// What's playing, shared with the mini player.
+struct NowPlayingState {
+    var title = ""
+    var artist = ""
+    var duration = 0.0
+    var position = 0.0
+    var playing = false
+    var updatedAt = Date()
+    var image: NSImage?
+}
+
 // Keyboard media keys, AirPods, and Control Center.
 // Commands are handed to the interface, which owns the queue, so they behave exactly like the footer buttons.
 final class MediaControls {
     static let artworkHosts = ["googleusercontent.com", "ytimg.com", "sndcdn.com"]
     var onCommand: ((String, Double?) -> Void)?
+    var onChange: ((NowPlayingState) -> Void)?
+    private(set) var state = NowPlayingState()
     private var info: [String: Any] = [:]
     private var artworkURL = ""
     private var artwork: MPMediaItemArtwork?
@@ -59,7 +72,10 @@ final class MediaControls {
         center.nowPlayingInfo = next
         center.playbackState = playing ? .playing : .paused
         MPRemoteCommandCenter.shared().changePlaybackPositionCommand.isEnabled = canSeek && duration > 0
-        if art != artworkURL { loadArtwork(art) }
+        let sameArt = art == artworkURL
+        state = NowPlayingState(title: title, artist: artist, duration: duration, position: position, playing: playing, updatedAt: Date(), image: sameArt ? state.image : nil)
+        if !sameArt { loadArtwork(art) }
+        onChange?(state)
     }
 
     private func loadArtwork(_ raw: String) {
@@ -75,6 +91,8 @@ final class MediaControls {
             self.artwork = artwork
             self.info[MPMediaItemPropertyArtwork] = artwork
             MPNowPlayingInfoCenter.default().nowPlayingInfo = self.info
+            self.state.image = image
+            self.onChange?(self.state)
         }
     }
 }

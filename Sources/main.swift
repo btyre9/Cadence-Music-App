@@ -8,7 +8,7 @@ final class InternalServiceView: WKWebView {
     override func isAccessibilityElement() -> Bool { false }
 }
 
-final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
+final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     let serviceUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"
     var window: NSWindow!
     var shell: WKWebView!
@@ -51,6 +51,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     var catalogReadyTimer: Timer?
     // Media keys, AirPods, and Control Center (see MediaControls.swift).
     let media = MediaControls()
+    let mini = MiniPlayer()
     var mediaSessionScript = ""
     let debugTiming = ProcessInfo.processInfo.environment["CADENCE_DEBUG"] != nil
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -64,13 +65,22 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         mediaSessionScript = (try? String(contentsOf: Bundle.main.url(forResource: "media-session-bridge", withExtension: "js")!, encoding: .utf8)) ?? ""
         media.onCommand = { [weak self] command, position in self?.remote(command, position) }
         media.start()
+        media.onChange = { [weak self] state in self?.mini.update(state) }
+        mini.onCommand = { [weak self] command in self?.remote(command, nil) }
+        mini.onOpenMain = { [weak self] in self?.showMainWindow(); self?.mini.close() }
         let menu = NSMenu(); let item = NSMenuItem(); menu.addItem(item)
         let appMenu = NSMenu(); appMenu.addItem(withTitle: "About Cadence", action: #selector(about), keyEquivalent: "")
         appMenu.addItem(.separator()); appMenu.addItem(withTitle: "Quit Cadence", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"); item.submenu = appMenu
         let editItem = NSMenuItem(); menu.addItem(editItem); let edit = NSMenu(title: "Edit"); editItem.submenu = edit
         for (title, action, key) in [("Undo", "undo:", "z"), ("Cut", "cut:", "x"), ("Copy", "copy:", "c"), ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a")] { edit.addItem(withTitle: title, action: Selector(action), keyEquivalent: key) }
-        NSApp.mainMenu = menu
+        let windowItem = NSMenuItem(); menu.addItem(windowItem); let windowMenu = NSMenu(title: "Window"); windowItem.submenu = windowMenu
+        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(.separator())
+        let miniItem = windowMenu.addItem(withTitle: "Mini Player", action: #selector(toggleMiniPlayer), keyEquivalent: "m"); miniItem.keyEquivalentModifierMask = [.command, .option]
+        windowMenu.addItem(withTitle: "Cadence", action: #selector(showMainWindow), keyEquivalent: "0")
+        NSApp.mainMenu = menu; NSApp.windowsMenu = windowMenu
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 820), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.delegate = self
         window.title = "Cadence"; window.minSize = NSSize(width: 1040, height: 680); window.center() // Follows the system Light/Dark setting; style.css supplies both palettes.
         let configuration = WKWebViewConfiguration(); configuration.userContentController.add(self, name: "cadence")
         shell = WKWebView(frame: window.contentView!.bounds, configuration: configuration)
@@ -88,7 +98,18 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     }
     @objc func about() { NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "Cadence", .applicationVersion: "0.7", .credits: NSAttributedString(string: "A personal music workspace. Interface inspired by Alexis Kiredjian’s YouTube Music Desktop App concept.")]) }
     func applicationWillTerminate(_ notification: Notification) { history.checkpoint() }
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    // Closing the main window keeps the music playing in the mini player; Quit (⌘Q) ends it.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard sender === window else { return true }
+        window.orderOut(nil); mini.show(); return false
+    }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !window.isVisible { showMainWindow() }
+        return true
+    }
+    @objc func showMainWindow() { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
+    @objc func toggleMiniPlayer() { mini.toggle() }
     func send(_ event: String, _ payload: Any) {
         guard let data = try? JSONSerialization.data(withJSONObject: ["event": event, "payload": payload]), let json = String(data: data, encoding: .utf8) else { return }
         shell.evaluateJavaScript("window.receive(\(json))", completionHandler: nil)
