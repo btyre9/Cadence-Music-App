@@ -1,0 +1,25 @@
+# Builds and tests the Windows version on a GitHub-hosted Windows machine,
+# and keeps the built app as a downloadable "Cadence-Windows" artifact.
+name: Windows build
+on:
+  push:
+    paths: ['Windows/**', 'Resources/**', 'Tests/**', '.github/workflows/windows.yml']
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Test
+        shell: pwsh
+        run: ./Windows/test.ps1
+      - name: Build
+        shell: pwsh
+        run: ./Windows/build.ps1 build/Cadence-Windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Cadence-Windows
+          path: build/Cadence-Windows

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Platform-neutral parts of the Windows app (listening rules, uploads, release lookups, settings).
+       Kept free of Windows APIs so the tests also run on a Mac or Linux with the .NET SDK. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Cadence.Core</RootNamespace>
+  </PropertyGroup>
+</Project>
