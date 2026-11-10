@@ -4,3 +4,7 @@ build/
 # macOS metadata (extra files on ExFAT drives)
 .DS_Store
 ._*
+
+# Windows (.NET) build output
+Windows/**/bin/
+Windows/**/obj/

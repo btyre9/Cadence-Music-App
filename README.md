@@ -2,6 +2,10 @@
 
 A personal macOS music client with custom browsing and playback controls, built with AppKit and WebKit. Requires an Apple silicon Mac running macOS 13 or later. Locally signed for development; not notarized for distribution.
 
+## Windows version
+
+A Windows version lives in `Windows/`. It shares this app's interface and YouTube Music code and replaces the Swift wrapper with a C# one. See [Windows/README.md](Windows/README.md) to build it.
+
 ## Automatic ListenBrainz history
 
 1. Open **Connections** in Cadence.
