@@ -78,6 +78,12 @@ Home, Explore, Library, search results, albums/collections, track lists, the Up 
 
 Starting YouTube playback stops SoundCloud. Loading or starting SoundCloud pauses YouTube. Browsing albums, Home, Discover, and Library does not interrupt music.
 
+## Lyrics and dislikes
+
+**Lyrics** (the Lyrics tab beside Queue and Saved, or the Lyrics button in the player bar) shows YouTube Music’s own lyrics for the playing song, with the provider credited underneath. They load from YouTube Music when the tab is open and follow song changes. Some songs have none.
+
+**Dislike** (the thumbs-down beside the heart, and in the player bar) sends YouTube Music’s Dislike, so it stops suggesting the song on every device, and keeps a list on this Mac. Cadence leaves disliked songs out of Home and Explore, dims them in albums, playlists, and search, skips them when the queue, Play all, radio, or autoplay reaches them, and skips the playing song when you dislike it. Choosing a disliked song yourself still plays it. Click the thumbs-down again to undo both.
+
 ## Playback architecture and limits
 
 This is a custom user interface, not a fully independent native YouTube streaming engine. Two internal WebKit service views provide catalog data and Premium playback using your own account session. They render behind the opaque Cadence interface, are excluded from accessibility navigation, and are not exposed as browsing panes. Catalog browsing and audio use separate service views so searches do not replace the currently playing song. No stream extraction, DRM handling, or ad blocking is implemented. YouTube ads, when served, remain audible and are labelled in the custom footer.
@@ -94,7 +100,7 @@ No Cadence server or analytics. Google sessions are stored in the app’s WebKit
 
 ## Build and tests
 
-Run `./build.sh` with Apple’s Command Line Tools installed. Default output: `build/Cadence.app`; pass a destination app path as the first argument to override it. On an ExFAT drive, code signing fails because macOS stores extra `._` files there; build to a Mac-formatted (APFS) location instead, for example `./build.sh ~/Applications/Cadence.app`.
+Run `./build.sh` with Apple’s Command Line Tools installed. Default output: `build/Cadence.app`; pass a destination app path as the first argument to override it. On an ExFAT drive, code signing fails because macOS stores extra `._` files there; build to a Mac-formatted (APFS) location instead, for example `./build.sh ~/Applications/Cadence.app`. Run `Tools/make-signing-cert.sh` once to create a private “Cadence Local Signing” certificate in your login keychain; `build.sh` then signs every build with it, so macOS keeps treating rebuilds as the same app and remembers Keychain access (choose **Always Allow** once). Without it, builds are signed ad hoc and macOS asks for the ListenBrainz token again after each rebuild. To review the interface in a browser with sample music, run `python3 Tools/preview-server.py` and open http://localhost:8765.
 
 For a live check against your signed-in account (read-only: it browses and searches, never plays or edits), run the built app with `CADENCE_DEBUG=1 CADENCE_SELFTEST=1 CADENCE_SELFTEST_DIR=/some/folder`. It logs page timings, saves a screenshot of each page, and quits. Add `CADENCE_LEGACY=1` to compare against the old website-loading method. No Node runtime is needed to use the app. Node is used only for adapter and custom-client tests.
 

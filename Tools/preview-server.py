@@ -35,6 +35,8 @@ window.webkit={messageHandlers:{cadence:{postMessage(m){switch(m.action){
  case 'next':case 'previous':case 'start-radio':case 'account':case 'external':case 'history-connect':case 'history-disconnect':
   send('notice','Preview only: “'+m.action+'” works in the Cadence app.',0);break;
  case 'library-request':send('library-result',{requestID:m.request?.requestID,ok:false,message:'Preview only: library changes work in the Cadence app.'});break;
+ case 'lyrics':send('lyrics',/[02468]$/.test(String(m.id.charCodeAt(0)))?{ok:true,videoId:m.id,lyrics:'(Preview placeholder — real lyrics load in the Cadence app.)\nThis is where the first verse goes\nline by line, as YouTube Music lists it\n\nA blank line starts the next verse\nand the chorus follows after\n\nThe last lines sit here',source:'Source: YouTube Music lyrics provider'}:{ok:false,missing:true,videoId:m.id,message:'No lyrics are available for this song.'},500);break;
+ case 'rate':send('rate-result',{ok:true,videoId:m.id,rating:m.rating});break;
  case 'radio-snapshot':send('radio-snapshot',{requestID:m.requestID,tracks:[]});break;
 }}}}};
 console.info('Cadence preview bridge ready');

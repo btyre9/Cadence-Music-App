@@ -18,5 +18,11 @@ async function run(request,browse=fixture(),options={}){const calls=[];const ctx
  r=await run({op:'create-radio-playlist',name:'Seed radio',videoIds:['seed12345','song12345','seed12345']});assert.equal(r.result.ok,true);assert.equal(r.calls[0].body.videoIds.length,2);assert.equal(r.calls[0].body.privacyStatus,'PRIVATE');assert.equal(r.calls.length,1,'Snapshot songs must be in the initial create request');
  r=await run({op:'create-radio-playlist',name:'Seed radio',videoIds:['seed12345']});assert.equal(r.result.ok,false);assert.equal(r.calls.length,0,'Do not create an empty or seed-only playlist');
  r=await run({op:'create-radio-playlist',name:'Seed radio',videoIds:['seed12345','bad value']});assert.equal(r.result.ok,false);assert.equal(r.calls.length,0);
+ r=await run({op:'rate',videoId:'4IJI6soiQhI',rating:'dislike'});assert.equal(r.result.ok,true);assert.ok(r.calls[0].url.includes('like/dislike'));assert.equal(r.calls[0].body.target.videoId,'4IJI6soiQhI');
+ r=await run({op:'rate',videoId:'4IJI6soiQhI',rating:'none'});assert.ok(r.calls[0].url.includes('like/removelike'),'Undo clears the dislike');
+ r=await run({op:'rate',videoId:'bad id!',rating:'dislike'});assert.equal(r.result.ok,false);assert.equal(r.calls.length,0);
+ r=await run({op:'rate',videoId:'4IJI6soiQhI',rating:'like'});assert.equal(r.result.ok,false);assert.equal(r.calls.length,0,'Only dislike and clear are sent');
+ r=await run({op:'rate',videoId:'4IJI6soiQhI',rating:'dislike'},fixture(),{signedOut:true});assert.equal(r.result.ok,false);assert.equal(r.calls.length,0);
+ console.log('PASS: song dislike and undo, rating validation;');
  console.log('PASS: playlist ownership, unsave versus delete, private creation, duplicate song IDs, reorder bounds, description clearing, sign-in rejection, request failures, and credential containment; all requests mocked.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

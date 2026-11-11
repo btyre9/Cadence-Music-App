@@ -46,6 +46,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     var historyTimer: Timer?
     // Catalog pages are read from YouTube Music's data service inside one booted service page.
     var browseScript = ""
+    var lyricsScript = ""
     var catalogBooted = false
     var catalogQueued: URL?
     var catalogReadyTimer: Timer?
@@ -58,6 +59,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         catalogScript = (try? String(contentsOf: Bundle.main.url(forResource: "youtube-catalog", withExtension: "js")!, encoding: .utf8)) ?? ""
         sampleScript = (try? String(contentsOf: Bundle.main.url(forResource: "youtube-sample", withExtension: "js")!, encoding: .utf8)) ?? ""
         browseScript = (try? String(contentsOf: Bundle.main.url(forResource: "youtube-browse", withExtension: "js")!, encoding: .utf8)) ?? ""
+        lyricsScript = (try? String(contentsOf: Bundle.main.url(forResource: "youtube-lyrics", withExtension: "js")!, encoding: .utf8)) ?? ""
         let menu = NSMenu(); let item = NSMenuItem(); menu.addItem(item)
         let appMenu = NSMenu(); appMenu.addItem(withTitle: "About Cadence", action: #selector(about), keyEquivalent: "")
         appMenu.addItem(.separator()); appMenu.addItem(withTitle: "Quit Cadence", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"); item.submenu = appMenu
@@ -118,6 +120,21 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             }
         case "library-request":
             if let request = body["request"] as? [String: Any] { libraryRequest(request) }
+        case "lyrics":
+            guard let id = body["id"] as? String, id.range(of: "^[A-Za-z0-9_-]{6,40}$", options: .regularExpression) != nil, !lyricsScript.isEmpty else { return }
+            guard catalog?.url?.host == "music.youtube.com" else { send("lyrics", ["ok": false, "videoId": id, "message": "YouTube Music is still loading. Try again shortly."]); return }
+            catalog.callAsyncJavaScript(lyricsScript, arguments: ["request": ["videoId": id]], in: nil, in: .page) { [weak self] result in
+                if case .success(let value) = result, let value = value as? [String: Any] { self?.send("lyrics", value) }
+                else { self?.send("lyrics", ["ok": false, "videoId": id, "message": "Couldn’t load lyrics. Try again."]) }
+            }
+        case "rate":
+            guard let id = body["id"] as? String, id.range(of: "^[A-Za-z0-9_-]{6,40}$", options: .regularExpression) != nil,
+                  let rating = body["rating"] as? String, ["dislike", "none"].contains(rating), !libraryScript.isEmpty else { return }
+            guard catalog?.url?.host == "music.youtube.com" else { send("rate-result", ["ok": false, "videoId": id, "rating": rating, "message": "Couldn’t reach YouTube Music; the dislike is saved in Cadence only."]); return }
+            catalog.callAsyncJavaScript(libraryScript, arguments: ["request": ["op": "rate", "videoId": id, "rating": rating]], in: nil, in: .page) { [weak self] result in
+                if case .success(let value) = result, let value = value as? [String: Any] { self?.send("rate-result", value) }
+                else { self?.send("rate-result", ["ok": false, "videoId": id, "rating": rating, "message": "Couldn’t confirm with YouTube Music; the dislike is saved in Cadence only."]) }
+            }
         case "catalog":
             if let raw = body["url"] as? String, let url = validatedMusicURL(raw) { loadCatalog(url) }
         case "youtube":

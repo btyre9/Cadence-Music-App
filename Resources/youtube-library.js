@@ -40,6 +40,12 @@ async function execute(request) {
   return {id,playlistId,title,description:runs(editable?.description)||runs(header.description),owned,kind:isArtist?'artist':isAlbum?'album':'playlist',canRemove:!owned&&(!!playlistId||(isArtist&&subscribed)),tracks,partial:find(data,'continuationItemRenderer').length>0||find(data,'nextContinuationData').length>0};
  }
  const op=request.op;
+// Dislike tells YouTube Music to stop recommending the song (Home, mixes, radio) on every device.
+if(op==='rate'){
+ const video=/^[A-Za-z0-9_-]{6,40}$/.test(request.videoId||'')?request.videoId:'';if(!video)throw Error('Select a valid song.');
+ if(request.rating!=='dislike'&&request.rating!=='none')throw Error('Unsupported rating.');
+ await api(request.rating==='dislike'?'like/dislike':'like/removelike',{target:{videoId:video}});return{ok:true,op,videoId:video,rating:request.rating};
+}
  if(op==='list-playlists'){
   const data=await api('browse',{browseId:'FEmusic_liked_playlists'});
   const rows=[...find(data,'musicTwoRowItemRenderer'),...find(data,'musicResponsiveListItemRenderer')];

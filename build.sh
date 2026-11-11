@@ -12,4 +12,13 @@ cp Assets/AppIcon.icns "$DEST/Contents/Resources/"
 cat > "$DEST/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Cadence</string><key>CFBundleIconFile</key><string>AppIcon</string><key>CFBundleIdentifier</key><string>local.cadence.music</string><key>CFBundleName</key><string>Cadence</string><key>CFBundleDisplayName</key><string>Cadence</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleShortVersionString</key><string>0.7</string><key>CFBundleVersion</key><string>7</string><key>LSMinimumSystemVersion</key><string>13.0</string><key>NSHighResolutionCapable</key><true/><key>NSHumanReadableCopyright</key><string>Personal prototype. Not affiliated with YouTube, SoundCloud, or ListenBrainz.</string></dict></plist>
 PLIST
-codesign --force --deep --sign - "$DEST"
+# Signing with a stable local certificate keeps Cadence the same app to macOS across rebuilds, so
+# Keychain access (the ListenBrainz token) is remembered. Without it, sign ad hoc: macOS then asks
+# again after every rebuild. Create the certificate once with Tools/make-signing-cert.sh.
+IDENTITY="${CADENCE_SIGN_IDENTITY:-Cadence Local Signing}"
+if security find-identity -p codesigning 2>/dev/null | grep -qF "\"$IDENTITY\""; then
+  codesign --force --deep --sign "$IDENTITY" "$DEST"
+else
+  echo "Signing ad hoc (no \"$IDENTITY\" certificate). Run Tools/make-signing-cert.sh to stop repeated Keychain prompts." >&2
+  codesign --force --deep --sign - "$DEST"
+fi

@@ -22,3 +22,4 @@ node Tests/now-release.cjs
 node Tests/radio-navigation.cjs
 node Tests/radio-save.cjs
 node Tests/browse.cjs
+node Tests/lyrics.cjs

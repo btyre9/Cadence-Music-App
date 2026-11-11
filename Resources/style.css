@@ -123,3 +123,24 @@ dialog::backdrop{background:#120c1670}
 .song-row.now-playing .row-play{color:var(--pink)}
 @media(prefers-reduced-motion:reduce){.row-play .eq i{animation:none;transform:scaleY(.6)}.row-play .eq i:nth-child(2){transform:scaleY(1)}.row-play .eq i:nth-child(3){transform:scaleY(.4)}}
 @media(prefers-color-scheme:dark){.song-row.now-playing,.song-row.now-playing:nth-child(even){background:#43304a}.song-row.now-playing:hover{background:#4f3455}.song-row.now-playing .song-name strong{color:#f07aa8}.song-row.now-playing .row-play{color:#f07aa8}.row-play .eq i{background:#f07aa8}}
+/* Dislike: thumbs-down beside the heart and in the player bar; disliked rows are dimmed. */
+.row-dislike,.now-dislike{border:0;background:transparent;padding:4px;display:inline-flex;align-items:center;justify-content:center;color:#a081ad;border-radius:6px}
+.row-dislike:hover,.now-dislike:hover{color:var(--pink);background:transparent}
+.row-dislike.active,.now-dislike.active{color:var(--pink)}
+.row-dislike.active svg path,.now-dislike.active svg path{fill:currentColor}
+.now-dislike{margin-left:6px;flex-shrink:0;align-self:center}.now-dislike[hidden]{display:none}
+.song-row.disliked .song-art,.song-row.disliked .song-name,.song-row.disliked .row-play{opacity:.42}
+.song-row.disliked .song-name strong{text-decoration:line-through;text-decoration-color:#a081ad80}
+@media(prefers-color-scheme:dark){.row-dislike,.now-dislike{color:#c09ad0}.row-dislike:hover,.now-dislike:hover,.row-dislike.active,.now-dislike.active{color:#f07aa8}}
+/* Lyrics tab in the rail, and the Lyrics button in the player bar. */
+.extras-row{display:flex;gap:6px;align-items:center}
+#show-lyrics{font-size:9px;padding:5px 9px}
+#show-lyrics[aria-pressed="true"]{border-color:var(--pink);color:var(--pink)}
+#rail-lyrics{padding-top:18px}
+.lyrics-head strong{display:block;font-size:13px;margin-top:8px;font-weight:650;line-height:1.25}
+.lyrics-head small{display:block;font-size:10px;color:var(--muted);margin-top:4px}
+.lyrics-body{margin-top:16px}
+.lyrics-body p{font-size:12px;line-height:1.65;margin:0 0 14px;color:var(--ink);font-weight:500}
+.lyrics-note{font-size:11px;color:var(--muted);line-height:1.5;margin-top:16px}
+.lyrics-source{display:block;font-size:9px;color:var(--muted);margin-top:6px;padding-top:10px;border-top:1px solid var(--border)}
+.lyrics-retry{font-size:10px;padding:5px 10px}
