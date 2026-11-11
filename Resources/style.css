@@ -105,3 +105,21 @@ dialog::backdrop{background:#120c1670}
 #now-release{color:#d39cc0}
 #create-radio{border-color:#52465d;color:#d2a3d6}
 }
+/* Now-playing song row (Apple Music style): pink title, animated bars in place of the play button. */
+.row-play{min-width:26px;display:inline-flex;align-items:center;justify-content:center}
+.row-play .eq{display:none;align-items:flex-end;justify-content:center;gap:2px;width:14px;height:12px}
+.row-play .eq i{display:block;width:3px;height:100%;border-radius:1px;background:var(--pink);transform-origin:bottom;animation:now-playing-bar .9s ease-in-out infinite alternate}
+.row-play .eq i:nth-child(2){animation-duration:.65s;animation-delay:-.4s}
+.row-play .eq i:nth-child(3){animation-duration:1.1s;animation-delay:-.2s}
+@keyframes now-playing-bar{from{transform:scaleY(.25)}to{transform:scaleY(1)}}
+.song-row.now-playing .row-play .glyph{display:none}
+.song-row.now-playing .row-play .eq{display:inline-flex}
+.song-row.now-playing:hover .row-play .glyph{display:inline}
+.song-row.now-playing:hover .row-play .eq{display:none}
+.song-row.now-playing.paused .row-play .eq i{animation-play-state:paused}
+.song-row.now-playing,.song-row.now-playing:nth-child(even){background:#f6dcea}
+.song-row.now-playing:hover{background:#f0cfe1}
+.song-row.now-playing .song-name strong{color:var(--pink);font-weight:650}
+.song-row.now-playing .row-play{color:var(--pink)}
+@media(prefers-reduced-motion:reduce){.row-play .eq i{animation:none;transform:scaleY(.6)}.row-play .eq i:nth-child(2){transform:scaleY(1)}.row-play .eq i:nth-child(3){transform:scaleY(.4)}}
+@media(prefers-color-scheme:dark){.song-row.now-playing,.song-row.now-playing:nth-child(even){background:#43304a}.song-row.now-playing:hover{background:#4f3455}.song-row.now-playing .song-name strong{color:#f07aa8}.song-row.now-playing .row-play{color:#f07aa8}.row-play .eq i{background:#f07aa8}}
